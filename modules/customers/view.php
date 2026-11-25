@@ -68,6 +68,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_return'])) {
                 if (!empty($item['serial_id'])) {
                     $pdo->prepare("UPDATE product_serials SET status = 'available', sale_id = NULL, updated_at = CURDATE() WHERE id = ? AND status = 'sold'")->execute([(int)$item['serial_id']]);
                 }
+                // Recalculate sale due_amount and payment_status so returned items don't stay listed as unpaid
+                $s_lock = $pdo->prepare("SELECT total_amount, paid_amount FROM sales WHERE id = ? FOR UPDATE");
+                $s_lock->execute([$sale_id]);
+                if ($sr_sale = $s_lock->fetch()) {
+                    $r_sum_st = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM sale_returns WHERE sale_id = ?");
+                    $r_sum_st->execute([$sale_id]);
+                    $total_ret = (float)$r_sum_st->fetchColumn();
+                    $new_due = round(max(0, (float)$sr_sale['total_amount'] - (float)$sr_sale['paid_amount'] - $total_ret), 2);
+                    $new_status = $new_due <= 0 ? 'paid' : ((float)$sr_sale['paid_amount'] > 0 ? 'partial' : 'pending');
+                    $pdo->prepare("UPDATE sales SET due_amount = ?, payment_status = ?, updated_at = CURDATE() WHERE id = ?")->execute([$new_due, $new_status, $sale_id]);
+                }
                 $pdo->commit();
                 $_SESSION['success'] = 'Sale return recorded. Product stock restored.';
             } catch (Throwable $e) {
@@ -184,21 +195,46 @@ if (isset($_GET['del_return'])) {
     if ($del_ret && (int)$del_ret['customer_id'] === $id) {
         try {
             $pdo->beginTransaction();
-            if (!empty($del_ret['product_id'])) {
-                $pdo->prepare("UPDATE products SET stock_quantity = GREATEST(0, stock_quantity - ?) WHERE id = ?")->execute([(int)$del_ret['quantity'], (int)$del_ret['product_id']]);
-                // the returned IMEI goes back to 'sold' with the sale it came from
-                $pdo->prepare("UPDATE product_serials ps JOIN sale_items si ON si.serial_id = ps.id AND si.sale_id = ? AND si.product_id = ?
-                               SET ps.status = 'sold', ps.sale_id = si.sale_id, ps.updated_at = CURDATE() WHERE ps.status = 'available' AND ps.sale_id IS NULL")
-                    ->execute([(int)$del_ret['sale_id'], (int)$del_ret['product_id']]);
+            $ret_sale_id = (int)$del_ret['sale_id'];
+            $ret_pid = !empty($del_ret['product_id']) ? (int)$del_ret['product_id'] : 0;
+            if ($ret_pid) {
+                // If this sale item had a serial/IMEI, ensure the unit is still available in stock before deleting the return
+                $si_ser = $pdo->prepare("SELECT COUNT(*) FROM sale_items WHERE sale_id = ? AND product_id = ? AND serial_id IS NOT NULL");
+                $si_ser->execute([$ret_sale_id, $ret_pid]);
+                if ((int)$si_ser->fetchColumn() > 0) {
+                    $avail_ser = $pdo->prepare("SELECT ps.id FROM product_serials ps JOIN sale_items si ON si.serial_id = ps.id AND si.sale_id = ? AND si.product_id = ?
+                                                WHERE ps.status = 'available' AND ps.sale_id IS NULL LIMIT 1 FOR UPDATE");
+                    $avail_ser->execute([$ret_sale_id, $ret_pid]);
+                    $restore_sid = $avail_ser->fetchColumn();
+                    if (!$restore_sid) {
+                        throw new RuntimeException('Cannot delete this return: the returned IMEI unit is no longer available in stock.');
+                    }
+                    $pdo->prepare("UPDATE product_serials SET status = 'sold', sale_id = ?, updated_at = CURDATE() WHERE id = ?")
+                        ->execute([$ret_sale_id, (int)$restore_sid]);
+                }
+                $pdo->prepare("UPDATE products SET stock_quantity = GREATEST(0, stock_quantity - ?) WHERE id = ?")->execute([(int)$del_ret['quantity'], $ret_pid]);
             }
             $pdo->prepare("DELETE FROM sale_returns WHERE id = ?")->execute([$del_rid]);
+            if ($ret_sale_id > 0) {
+                $s_lock = $pdo->prepare("SELECT total_amount, paid_amount FROM sales WHERE id = ? FOR UPDATE");
+                $s_lock->execute([$ret_sale_id]);
+                if ($sr_sale = $s_lock->fetch()) {
+                    $r_sum_st = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM sale_returns WHERE sale_id = ?");
+                    $r_sum_st->execute([$ret_sale_id]);
+                    $total_ret = (float)$r_sum_st->fetchColumn();
+                    $new_due = round(max(0, (float)$sr_sale['total_amount'] - (float)$sr_sale['paid_amount'] - $total_ret), 2);
+                    $new_status = $new_due <= 0 ? 'paid' : ((float)$sr_sale['paid_amount'] > 0 ? 'partial' : 'pending');
+                    $pdo->prepare("UPDATE sales SET due_amount = ?, payment_status = ?, updated_at = CURDATE() WHERE id = ?")->execute([$new_due, $new_status, $ret_sale_id]);
+                }
+            }
             $pdo->commit();
+            $_SESSION['success'] = 'Return deleted';
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             error_log('Return delete failed: ' . $e->getMessage());
+            $_SESSION['error'] = $e instanceof RuntimeException ? $e->getMessage() : 'Could not delete the return.';
         }
     }
-    $_SESSION['success'] = 'Return deleted';
     header("Location: view.php?id=$id&tab=returns");
     exit;
 }

@@ -7,7 +7,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 if (empty($_SESSION['user_id'])) {
     $script = $_SERVER['SCRIPT_NAME'] ?? '';
-    $is_json = in_array(basename($script), ['sale_view.php', 'search.php', 'ajax_get_product.php'], true)
+    $is_json = in_array(basename($script), ['sale_view.php', 'search.php', 'ajax_get_product.php', 'purchase_details.php'], true)
         || isset($_GET['check_imei'])
         || (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest');
     if ($is_json) {

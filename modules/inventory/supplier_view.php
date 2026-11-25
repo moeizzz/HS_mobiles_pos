@@ -113,6 +113,7 @@ $opening = (float)$supplier['opening_balance'];
 $adjustment = (float)$supplier['adjustment'];
 $credit_purchase = 0;
 foreach ($purchases_data as $p) {
+    if ($p['status'] === 'cancelled') continue;
     if ($p['status'] !== 'cancelled') $credit_purchase += (float)$p['total_amount'];
 }
 $cash_paid = array_sum(array_column($payments_data, 'amount'));
@@ -150,6 +151,7 @@ foreach ($serials_stmt->fetchAll() as $sr) {
 // Build unified ledger (purchases as debit, payments as credit)
 $ledger = [];
 foreach ($purchases_data as $p) {
+    if ($p['status'] === 'cancelled') continue;
     $products = $purchase_products[$p['id']] ?? [];
     $desc = !empty($products) ? implode(', ', array_slice($products, 0, 3)) : 'Products supplied';
     if (count($products) > 3) $desc .= ' +' . (count($products) - 3) . ' more';
@@ -589,8 +591,8 @@ require_once '../../includes/header.php';
           <tfoot>
             <tr class="font-weight-bold" style="background:#f8f9fc;">
               <td colspan="3" class="text-right">Totals</td>
-              <td class="text-right"><?= formatCurrency($ledger_debit_total) ?></td>
               <td class="text-right"><?= formatCurrency($ledger_credit_total) ?></td>
+              <td class="text-right"><?= formatCurrency($ledger_debit_total) ?></td>
               <td class="text-right"><?= formatCurrency($closing) ?></td>
             </tr>
           </tfoot>

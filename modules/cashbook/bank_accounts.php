@@ -28,9 +28,9 @@ function bank_validate(PDO $pdo, array $in, int $editId = 0) {
     if (!isset(BANK_TYPES[$d['account_type']])) return ['Select a valid account type.', $d];
     if ($d['opening_balance'] < 0) return ['Opening balance cannot be negative.', $d];
     if ($d['opening_balance'] > 1000000000) return ['Opening balance looks too large.', $d];
-    $st = $pdo->prepare("SELECT id FROM bank_accounts WHERE account_no = ? AND bank_name = ? AND id <> ?");
-    $st->execute([$d['account_no'], $d['bank_name'], $editId]);
-    if ($st->fetchColumn()) return ['This account number already exists for ' . $d['bank_name'] . '.', $d];
+    $st = $pdo->prepare("SELECT id FROM bank_accounts WHERE account_no = ? AND id <> ?");
+    $st->execute([$d['account_no'], $editId]);
+    if ($st->fetchColumn()) return ['This account number already exists.', $d];
     return ['', $d];
 }
 

@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $person_phone  = trim($_POST['person_phone'] ?? '');
     $person_cnic   = trim($_POST['person_cnic'] ?? '');
     $person_address = trim($_POST['person_address'] ?? '');
-    $invoice_no    = $_POST['invoice_no'] ?? '';
+    $invoice_no    = trim($_POST['invoice_no'] ?? '') ?: null;
     $product_id    = (int)($_POST['product_id'] ?? 0);
     $purchase_price = (float)($_POST['purchase_price'] ?? 0);
     $product_type  = $_POST['product_type'] ?? 'general';
@@ -246,7 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $pdo->beginTransaction();
 
-        $stmt = $pdo->prepare("INSERT INTO purchases (supplier_id, person_name, person_phone, person_cnic, person_address, invoice_no, purchase_date, total_amount, paid_amount, due_amount, status, notes, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, NOW(), NOW())");
+        $stmt = $pdo->prepare("INSERT INTO purchases (supplier_id, person_name, person_phone, person_cnic, person_address, invoice_no, purchase_date, total_amount, paid_amount, due_amount, status, notes, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, CURDATE(), CURDATE())");
         $stmt->execute([$supplier_id ?: null, $person_name ?: null, $person_phone ?: null, $person_cnic ?: null, $person_address ?: null, $invoice_no, $purchase_date, $subtotal, $paid_amount, $due_amount, $notes, $_SESSION['user_id'] ?? 1]);
         $purchase_id = $pdo->lastInsertId();
 
@@ -271,7 +271,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ra = $rams[$i] ?? '';
                 $co = $colors[$i] ?? '';
                 if ($i1 || $i2) {
-                    $stmt = $pdo->prepare("INSERT INTO product_serials (product_id, imei_number, serial_number, purchase_id, status, purchase_price, notes, created_at, updated_at) VALUES (?, ?, ?, ?, 'available', ?, ?, NOW(), NOW())");
+                    $stmt = $pdo->prepare("INSERT INTO product_serials (product_id, imei_number, serial_number, purchase_id, status, purchase_price, notes, created_at, updated_at) VALUES (?, ?, ?, ?, 'available', ?, ?, CURDATE(), CURDATE())");
                     $stmt->execute([$product_id, $i1 ?: null, $i2 ?: null, $purchase_id, $unit_prices[$i] ?? 0, trim("Mobile - $co - $st/$ra - $cond", ' -')]);
                 }
             }
@@ -282,6 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($supplier_id > 0) {
                 $payment_id = insert('supplier_payments', [
                     'supplier_id' => $supplier_id,
+                    'purchase_id' => $purchase_id,
                     'amount' => $paid_amount,
                     'payment_method' => $payment_method,
                     'bank_account_id' => $bank_account_id ?: null,

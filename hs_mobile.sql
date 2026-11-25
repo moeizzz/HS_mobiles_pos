@@ -866,7 +866,7 @@ CREATE TABLE `sales` (
 
 INSERT INTO `sales` (`id`, `invoice_no`, `customer_id`, `sale_date`, `subtotal`, `discount_id`, `discount_amount`, `taxable_amount`, `tax_rate`, `tax_amount`, `total_amount`, `paid_amount`, `due_amount`, `payment_method`, `payment_status`, `status`, `notes`, `branch_id`, `created_by`, `created_at`, `updated_at`) VALUES
 (1, 'INV-261124-001', 3, '2026-11-24', 45000.00, NULL, 0.00, 0.00, 0.00, 0.00, 45000.00, 45000.00, 0.00, 'cash', 'paid', 'active', NULL, NULL, 1, '2026-11-24', '2026-11-24'),
-(2, 'INV-261124-002', 1, '2026-11-24', 42000.00, NULL, 0.00, 0.00, 0.00, 0.00, 42000.00, 12000.00, 30000.00, NULL, 'partial', 'active', NULL, NULL, 1, '2026-11-24', '2026-11-24'),
+(2, 'INV-261124-002', 1, '2026-11-24', 42000.00, NULL, 0.00, 0.00, 0.00, 0.00, 42000.00, 12000.00, 0.00, NULL, 'paid', 'active', NULL, NULL, 1, '2026-11-24', '2026-11-24'),
 (3, 'INV-261124-003', 2, '2026-11-24', 50500.00, NULL, 0.00, 0.00, 0.00, 0.00, 50500.00, 30000.00, 20500.00, 'cash', 'partial', 'active', NULL, NULL, 1, '2026-11-24', '2026-11-24'),
 (4, 'INV-261124-004', 4, '2026-11-24', 142000.00, NULL, 0.00, 0.00, 0.00, 0.00, 142000.00, 142000.00, 0.00, 'bank', 'paid', 'active', NULL, NULL, 1, '2026-11-24', '2026-11-24'),
 (5, 'INV-261124-005', 1, '2026-11-24', 58000.00, NULL, 2000.00, 0.00, 0.00, 0.00, 56000.00, 56000.00, 0.00, 'cash', 'paid', 'active', NULL, NULL, 1, '2026-11-24', '2026-11-24'),

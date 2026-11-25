@@ -23,6 +23,9 @@ $all_products = $pdo->query("
     ORDER BY p.name
 ")->fetchAll();
 $bank_accounts = getAll('bank_accounts', 'bank_name ASC, account_name ASC');
+$orig_bank_st = $pdo->prepare("SELECT bt.bank_account_id FROM bank_transactions bt JOIN payments p ON p.id = bt.reference_id WHERE bt.reference_type = 'payment' AND p.sale_id = ? ORDER BY bt.id DESC LIMIT 1");
+$orig_bank_st->execute([$id]);
+$orig_bank_account_id = (int)($orig_bank_st->fetchColumn() ?: 0);
 
 // Items of this sale
 $item_stmt = $pdo->prepare("SELECT si.*, p.name AS product_name, p.code AS product_code, p.product_type FROM sale_items si LEFT JOIN products p ON p.id = si.product_id WHERE si.sale_id = ? ORDER BY si.id");
@@ -39,7 +42,7 @@ foreach ($sold_serials as $sn) {
 }
 
 // Selectable serials per mobile product: available + this sale's sold serials
-$mobile_serials = $pdo->query("SELECT s.*, p.product_type FROM product_serials s JOIN products p ON p.id = s.product_id WHERE p.product_type = 'mobile' AND (s.status = 'available' OR s.sale_id = " . (int)$id . ") ORDER BY s.product_id, s.imei_number")->fetchAll();
+$mobile_serials = $pdo->query("SELECT s.*, s.serial_number AS imei2, p.product_type FROM product_serials s JOIN products p ON p.id = s.product_id WHERE p.product_type = 'mobile' AND (s.status = 'available' OR s.sale_id = " . (int)$id . ") ORDER BY s.product_id, s.imei_number")->fetchAll();
 $serials_by_product = [];
 foreach ($mobile_serials as $ms) {
     $serials_by_product[$ms['product_id']][] = $ms;
@@ -172,6 +175,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($received_amount > 0) {
+            $branch_id = $_SESSION['branch_id'] ?? null;
+            if ($branch_id !== null) {
+                $br_chk = $pdo->prepare("SELECT id FROM branches WHERE id = ?");
+                $br_chk->execute([$branch_id]);
+                if (!$br_chk->fetchColumn()) $branch_id = null;
+            }
             $pay_id = insert('payments', [
                 'sale_id' => $id,
                 'payment_date' => $sale_date,
@@ -179,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'payment_type' => 'sale',
                 'payment_method' => $payment_method,
                 'notes' => 'Payment for ' . $sale['invoice_no'],
-                'branch_id' => $_SESSION['branch_id'] ?? null,
+                'branch_id' => $branch_id,
                 'received_by' => $_SESSION['user_id'] ?? null,
                 'created_at' => date('Y-m-d'),
             ]);
@@ -370,8 +379,9 @@ require_once '../../includes/header.php';
           <div class="row">
             <div class="col-6">
               <div class="form-group mb-2">
-                <label class="small text-muted">Total Amount</label>
-                <div class="finance-value" id="totalDisplay"><?= number_format($row_total, 2, '.', '') ?></div>
+                <?php $sale_discount = (float)($sale['discount_amount'] ?? 0); ?>
+                <label class="small text-muted">Total Amount<?= $sale_discount > 0 ? ' (after discount ' . formatCurrency($sale_discount) . ')' : '' ?></label>
+                <div class="finance-value" id="totalDisplay"><?= number_format(max(0, $row_total - min($sale_discount, $row_total)), 2, '.', '') ?></div>
               </div>
             </div>
             <div class="col-6">
@@ -397,7 +407,7 @@ require_once '../../includes/header.php';
                 <select name="bank_account_id" class="form-control">
                   <option value="">Select Account</option>
                   <?php foreach ($bank_accounts as $ba): ?>
-                    <option value="<?= $ba['id'] ?>"><?= htmlspecialchars($ba['bank_name'] . ' - ' . $ba['account_name']) ?></option>
+                    <option value="<?= $ba['id'] ?>" <?= (int)$ba['id'] === $orig_bank_account_id ? 'selected' : '' ?>><?= htmlspecialchars($ba['bank_name'] . ' - ' . $ba['account_name']) ?></option>
                   <?php endforeach; ?>
                 </select>
               </div>
@@ -440,6 +450,7 @@ require_once '../../includes/header.php';
 
 <script>
 var SERIALS_BY_PRODUCT = <?= json_encode($serials_by_product, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+var SALE_DISCOUNT = <?= json_encode((float)($sale['discount_amount'] ?? 0)) ?>;
 $(document).ready(function() {
 
     function updateEntryPreview() {
@@ -648,7 +659,8 @@ $(document).ready(function() {
             itemCount++;
             total += parseFloat($(this).find('.line-total').text()) || 0;
         });
-        $('#totalDisplay').text(total.toFixed(2));
+        var netTotal = Math.max(0, total - Math.min(SALE_DISCOUNT, total));
+        $('#totalDisplay').text(netTotal.toFixed(2));
         calcPayment();
 
         if (itemCount === 0) {

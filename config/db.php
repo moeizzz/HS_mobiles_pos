@@ -1,18 +1,28 @@
 <?php
-$host = 'localhost';
+date_default_timezone_set('Asia/Karachi');
+
+// ============================================================
+// Database Credentials (Local XAMPP defaults shown below).
+// For InfinityFree live hosting, replace with your panel values:
+//   $host     = 'sqlXXX.infinityfree.com';
+//   $username = 'if0_XXXXXXXX';
+//   $password = 'YOUR_VPANEL_PASSWORD';
+//   $dbname   = 'if0_XXXXXXXX_hs_mobile';
+// ============================================================
+$host     = 'localhost';
 $username = 'root';
 $password = '';
 
 // ============================================================
 // DB MODE: change this to switch between Client and Test DB
-//   'client' - production database (Hs_Mobile)
-//   'test'   - testing/development database (Hs_Mobile)
+//   'client' - production database (hs_mobile)
+//   'test'   - testing/development database (hs_mobile)
 // ============================================================
 $db_mode = 'client';
 
 $databases = [
-    'client' => 'Hs_Mobile',
-    'test'   => 'Hs_Mobile',
+    'client' => 'hs_mobile',
+    'test'   => 'hs_mobile',
 ];
 
 $dbname = $databases[$db_mode] ?? $databases['client'];

@@ -94,8 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // 1) Header
-        $pdo->prepare("UPDATE purchases SET supplier_id=?, invoice_no=?, purchase_date=?, notes=?, status=?, person_name=?, person_phone=?, person_cnic=?, person_address=?, updated_at=NOW() WHERE id=?")
-            ->execute([$new_supplier_id, $invoice_no, $purchase_date, $notes, $status, $person_name ?: null, $person_phone ?: null, $person_cnic ?: null, $person_address ?: null, $id]);
+        $pdo->prepare("UPDATE purchases SET supplier_id=?, invoice_no=?, purchase_date=?, notes=?, status=?, person_name=?, person_phone=?, person_cnic=?, person_address=?, updated_at=CURDATE() WHERE id=?")
+            ->execute([$new_supplier_id, $invoice_no ?: null, $purchase_date, $notes, $status, $person_name ?: null, $person_phone ?: null, $person_cnic ?: null, $person_address ?: null, $id]);
 
         // 2) Delete marked items
         foreach (($_POST['remove_item'] ?? []) as $rid) {
@@ -179,6 +179,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$new_name) throw new Exception('Enter product name for the new item.');
                 if ($new_sale_price <= 0) throw new Exception('Enter a sale price for the new item.');
                 $new_storage = $new_ram = $new_color = '';
+                $autoCat = $pdo->prepare("SELECT id FROM categories WHERE product_type = ? AND status = 1 ORDER BY id LIMIT 1");
+                $autoCat->execute([$add_type]);
+                $catId = $autoCat->fetchColumn() ?: null;
                 // Merge into existing product with same name + type instead of creating a duplicate row
                 $existing = findProductByNameType($new_name, $add_type);
                 if ($existing) {
@@ -195,9 +198,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         update('products', $fill, $add_product_id);
                     }
                 } else {
-                    $autoCat = $pdo->prepare("SELECT id FROM categories WHERE product_type = ? AND status = 1 ORDER BY id LIMIT 1");
-                    $autoCat->execute([$add_type]);
-                    $catId = $autoCat->fetchColumn() ?: null;
                     $add_product_id = insert('products', [
                         'code' => generateProductCode($add_type),
                         'name' => $new_name,
@@ -231,8 +231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?")->execute([$add_qty, $add_product_id]);
         }
 
-        // 5) Update serial / IMEI rows
-        foreach (($_POST['serial_id'] ?? []) as $k => $sid) {
+        // 5) Update serial / IMEI rows (keyed by serial id so disabled sold rows never shift indexes)
+        foreach (($_POST['serial_id'] ?? []) as $sid) {
             $sid = (int)$sid;
             if (!$sid) continue;
             $st = $pdo->prepare("SELECT ps.*, p.product_type AS ptype FROM product_serials ps JOIN products p ON p.id = ps.product_id WHERE ps.id = ? AND ps.purchase_id = ?");
@@ -241,10 +241,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$srow) continue;
             if ($srow['status'] === 'sold') continue;
 
-            $imei1 = trim($_POST['serial_imei1'][$k] ?? '');
-            $imei2 = trim($_POST['serial_imei2'][$k] ?? '');
-            $snotes = trim($_POST['serial_notes'][$k] ?? '');
-            $serial_price = max(0, (float)($_POST['serial_price'][$k] ?? 0));
+            $imei1 = trim($_POST['serial_imei1'][$sid] ?? '');
+            $imei2 = trim($_POST['serial_imei2'][$sid] ?? '');
+            $snotes = trim($_POST['serial_notes'][$sid] ?? '');
+            $serial_price = max(0, (float)($_POST['serial_price'][$sid] ?? 0));
 
             if ($srow['ptype'] === 'mobile' && $imei1 === '') {
                 throw new Exception('IMEI 1 is required for a mobile - it cannot be left empty.');
@@ -268,9 +268,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($srow['ptype'] === 'mobile') {
-                $pdo->prepare("UPDATE product_serials SET imei_number = ?, serial_number = ?, notes = ?, purchase_price = ?, updated_at = NOW() WHERE id = ?")->execute([$imei1 ?: null, $imei2 ?: null, $snotes ?: null, $serial_price, $sid]);
+                $pdo->prepare("UPDATE product_serials SET imei_number = ?, serial_number = ?, notes = ?, purchase_price = ?, updated_at = CURDATE() WHERE id = ?")->execute([$imei1 ?: null, $imei2 ?: null, $snotes ?: null, $serial_price, $sid]);
             } else {
-                $pdo->prepare("UPDATE product_serials SET serial_number = ?, notes = ?, purchase_price = ?, updated_at = NOW() WHERE id = ?")->execute([$imei1 ?: null, $snotes ?: null, $serial_price, $sid]);
+                $pdo->prepare("UPDATE product_serials SET serial_number = ?, notes = ?, purchase_price = ?, updated_at = CURDATE() WHERE id = ?")->execute([$imei1 ?: null, $snotes ?: null, $serial_price, $sid]);
             }
         }
 
@@ -566,23 +566,23 @@ require_once '../../includes/header.php';
               <?php if ($isMobile): ?>
                 <td>
                   <input type="hidden" name="serial_id[]" value="<?=$sr['id']?>">
-                  <input type="text" name="serial_imei1[]" class="form-control form-control-sm imei-input" data-orig="<?=htmlspecialchars($sr['imei_number']??'')?>" value="<?=htmlspecialchars($sr['imei_number']??'')?>" placeholder="IMEI 1" maxlength="15" <?=$locked?'readonly disabled':''?> oninput="this.value=this.value.replace(/\D/g,'')">
+                  <input type="text" name="serial_imei1[<?=$sr['id']?>]" class="form-control form-control-sm imei-input" data-orig="<?=htmlspecialchars($sr['imei_number']??'')?>" value="<?=htmlspecialchars($sr['imei_number']??'')?>" placeholder="IMEI 1" maxlength="15" <?=$locked?'readonly disabled':''?> oninput="this.value=this.value.replace(/\D/g,'')">
                 </td>
                 <td>
-                  <input type="text" name="serial_imei2[]" class="form-control form-control-sm imei-input" data-orig="<?=htmlspecialchars($sr['serial_number']??'')?>" value="<?=htmlspecialchars($sr['serial_number']??'')?>" placeholder="IMEI 2" maxlength="15" <?=$locked?'readonly disabled':''?> oninput="this.value=this.value.replace(/\D/g,'')">
+                  <input type="text" name="serial_imei2[<?=$sr['id']?>]" class="form-control form-control-sm imei-input" data-orig="<?=htmlspecialchars($sr['serial_number']??'')?>" value="<?=htmlspecialchars($sr['serial_number']??'')?>" placeholder="IMEI 2" maxlength="15" <?=$locked?'readonly disabled':''?> oninput="this.value=this.value.replace(/\D/g,'')">
                 </td>
               <?php else: ?>
                 <td colspan="2">
                   <input type="hidden" name="serial_id[]" value="<?=$sr['id']?>">
-                  <input type="text" name="serial_imei1[]" class="form-control form-control-sm" value="<?=htmlspecialchars($sr['serial_number']??'')?>" placeholder="Serial Number" <?=$locked?'readonly disabled':''?>>
-                  <input type="hidden" name="serial_imei2[]" value="">
+                  <input type="text" name="serial_imei1[<?=$sr['id']?>]" class="form-control form-control-sm" value="<?=htmlspecialchars($sr['serial_number']??'')?>" placeholder="Serial Number" <?=$locked?'readonly disabled':''?>>
+                  <input type="hidden" name="serial_imei2[<?=$sr['id']?>]" value="">
                 </td>
               <?php endif; ?>
               <td>
-                <input type="text" name="serial_notes[]" class="form-control form-control-sm" value="<?=htmlspecialchars($sr['notes']??'')?>" placeholder="Details" <?=$locked?'readonly disabled':''?>>
+                <input type="text" name="serial_notes[<?=$sr['id']?>]" class="form-control form-control-sm" value="<?=htmlspecialchars($sr['notes']??'')?>" placeholder="Details" <?=$locked?'readonly disabled':''?>>
               </td>
               <td>
-                <input type="number" name="serial_price[]" class="form-control form-control-sm text-right serial-price" step="0.01" min="0" value="<?=htmlspecialchars($sr['purchase_price'] ?? 0)?>" <?=$locked?'readonly disabled':''?> oninput="recalcFromSerials()">
+                <input type="number" name="serial_price[<?=$sr['id']?>]" class="form-control form-control-sm text-right serial-price" step="0.01" min="0" value="<?=htmlspecialchars($sr['purchase_price'] ?? 0)?>" <?=$locked?'readonly disabled':''?> oninput="recalcFromSerials()">
               </td>
               <td class="text-center">
                 <span class="badge badge-<?= $sr['status'] === 'available' ? 'success' : ($sr['status'] === 'sold' ? 'secondary' : 'warning') ?>"><?= ucfirst($sr['status']) ?></span>
@@ -715,10 +715,12 @@ require_once '../../includes/header.php';
             errors.push('IMEI "' + v + '" must be exactly 15 digits (' + v.length + ' entered).');
           }
         });
-        var removed = document.querySelectorAll('input[name="remove_item[]"]:checked').length;
-        if (removed) errors.push(removed + ' item(s) will be removed and stock reduced.');
         if (errors.length) {
           alert(errors.join('\n'));
+          return false;
+        }
+        var removed = document.querySelectorAll('input[name="remove_item[]"]:checked').length;
+        if (removed && !confirm(removed + ' item(s) will be removed and stock reduced. Continue?')) {
           return false;
         }
         return true;

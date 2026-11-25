@@ -31,7 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'cnic'          => $cnic,
         'address'       => $_POST['address'] ?? '',
         'opening_due'   => (float)($_POST['opening_balance'] ?? 0),
-        'opening_paid'  => 0,
         'updated_at'    => date('Y-m-d')
     ], $id);
     redirect('index.php', 'Customer updated successfully');

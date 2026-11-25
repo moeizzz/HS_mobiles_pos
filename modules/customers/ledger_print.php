@@ -13,7 +13,7 @@ $sales_data->execute([$id]); $sales_data = $sales_data->fetchAll();
 $payments_data = $pdo->prepare("SELECT p.* FROM payments p WHERE p.sale_id IN (SELECT id FROM sales WHERE customer_id = ?) ORDER BY p.payment_date ASC");
 $payments_data->execute([$id]); $payments_data = $payments_data->fetchAll();
 
-$returns_data = $pdo->prepare("SELECT * FROM sale_returns WHERE customer_id = ? ORDER BY return_date ASC");
+$returns_data = $pdo->prepare("SELECT sr.*, s.invoice_no FROM sale_returns sr LEFT JOIN sales s ON s.id = sr.sale_id WHERE sr.customer_id = ? ORDER BY sr.return_date ASC");
 $returns_data->execute([$id]); $returns_data = $returns_data->fetchAll();
 
 // Build sale_id → products map for ledger
