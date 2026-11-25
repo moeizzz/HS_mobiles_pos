@@ -1,0 +1,7 @@
+# Block directory listing and sensitive paths
+Options -Indexes
+RedirectMatch 404 /\.git
+RedirectMatch 404 /(config|includes|migrations)(/|$)
+<FilesMatch "\.(sql|md)$">
+  Require all denied
+</FilesMatch>
